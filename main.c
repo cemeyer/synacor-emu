@@ -151,6 +151,89 @@ ctrlc_handler(int s)
 	ctrlc = true;
 }
 
+/*
+ * E.g., https://www.stockfighter.io/trainer/resource/level_1.od
+ */
+static FILE *
+objdump_to_rom(FILE *od)
+{
+	FILE *res, *trans;
+	const char *tab1, *tab2, *t;
+	char *buf, *line;
+	size_t sz, wr, linecap;
+	ssize_t rd;
+	unsigned lineoff, b;
+	int rc;
+
+	trans = open_memstream(&buf, &sz);
+	ASSERT(trans, "open_memstream");
+
+	line = NULL;
+	linecap = 0;
+
+	while (true) {
+		errno = 0;
+		rd = getline(&line, &linecap, od);
+		if (rd < 0) {
+			ASSERT(errno == 0, "getline: %d:%s", errno,
+			    strerror(errno));
+			break;
+		}
+
+		/* Skip empty lines */
+		if (rd < 2)
+			continue;
+		/* Lines we care about start with spaces */
+		if (line[0] != ' ')
+			continue;
+
+		/* Scan the offset and seek to it in the output memstream */
+		rc = sscanf(line, " %x: ", &lineoff);
+		if (rc != 1) {
+			printf("Skipping unexpected line:%s\n", line);
+			continue;
+		}
+		ASSERT(lineoff < UINT16_MAX, "lineoff: %u", lineoff);
+
+		rc = fseeko(trans, lineoff, SEEK_SET);
+		ASSERT(rc == 0, "fseeko");
+
+		/* Find the data for this line */
+		tab1 = strchr(line, '\t');
+		if (tab1 == NULL) {
+			printf("Skipping unexpected line2:%s\n", line);
+			continue;
+		}
+		tab1++;
+
+		tab2 = strstr(tab1, "  ");
+		if (tab2 == NULL)
+			tab2 = strchr(tab1, '\t');
+		if (tab2 == NULL) {
+			printf("Skipping unexpected line3:%s\n", line);
+			continue;
+		}
+
+		for (t = tab1; t < tab2; t += 3) {
+			rc = sscanf(t, "%02x", &b);
+			if (rc != 1)
+				break;
+			ASSERT(b <= UINT8_MAX, "range");
+
+			rc = fputc(b, trans);
+			ASSERT(rc != EOF, "fputc");
+		}
+	}
+
+	free(line);
+	fclose(od);
+	fclose(trans);
+
+	res = fmemopen(buf, sz, "rb");
+	ASSERT(res != NULL, "fmemopen");
+	return (res);
+}
+
 void
 usage(void)
 {
@@ -160,6 +243,7 @@ usage(void)
 		"    -g            Debug with GDB\n"
 		"    -l=<N>        Limit execution to N instructions\n"
 		"    -t=TRACEFILE  Emit instruction trace\n"
+		"    -T            binaryimage is in objdump text format\n"
 		"    -x            Trace output in hex\n");
 	exit(1);
 }
@@ -171,12 +255,12 @@ main(int argc, char **argv)
 	const char *romfname;
 	FILE *romfile;
 	int opt;
-	bool waitgdb = false;
+	bool waitgdb = false, textformat = false;
 
 	if (argc < 2)
 		usage();
 
-	while ((opt = getopt(argc, argv, "gl:t:x")) != -1) {
+	while ((opt = getopt(argc, argv, "gl:t:Tx")) != -1) {
 		switch (opt) {
 		case 'g':
 			waitgdb = true;
@@ -191,6 +275,9 @@ main(int argc, char **argv)
 				    optarg);
 				exit(1);
 			}
+			break;
+		case 'T':
+			textformat = true;
 			break;
 		case 'x':
 			tracehex = true;
@@ -208,6 +295,9 @@ main(int argc, char **argv)
 
 	romfile = fopen(romfname, "rb");
 	ASSERT(romfile, "fopen");
+
+	if (textformat)
+		romfile = objdump_to_rom(romfile);
 
 	input_record = g_hash_table_new_full(NULL, NULL, NULL, free);
 	ASSERT(input_record, "x");
