@@ -47,6 +47,11 @@ static struct instr_decode synacor_instr[] = {
 	{ 7, 2, instr_jt },
 	{ 8, 2, instr_jf },
 	{ 9, 3, instr_add },
+	{ 12, 3, instr_and },
+	{ 13, 3, instr_or },
+	{ 14, 2, instr_not },
+	{ 17, 1, instr_call },
+	{ 18, 0, instr_ret },
 	{ 19, 1, instr_out },
 	{ 21, 0, instr_nop },
 };

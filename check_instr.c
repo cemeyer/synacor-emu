@@ -218,6 +218,23 @@ START_TEST(test_add)
 }
 END_TEST
 
+START_TEST(test_and)
+{
+	uint16_t code[] = {
+		12, REG(0), 32064, 885,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(regs[0], 320);
+	emulate1();
+	ck_assert_uint_eq(pc, 5);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
 START_TEST(test_eq)
 {
 	uint16_t code[] = {
@@ -256,6 +273,40 @@ START_TEST(test_gt)
 	ck_assert_uint_eq(regs[0], 1);
 	emulate1();
 	ck_assert_uint_eq(pc, 9);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_not)
+{
+	uint16_t code[] = {
+		14, REG(0), 32064,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 3);
+	ck_assert_uint_eq(regs[0], 703);
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_or)
+{
+	uint16_t code[] = {
+		13, REG(0), 32064, 885,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(regs[0], 32629);
+	emulate1();
+	ck_assert_uint_eq(pc, 5);
 	ck_assert_uint_eq(halted, true);
 }
 END_TEST
@@ -319,6 +370,55 @@ START_TEST(test_pop)
 }
 END_TEST
 
+START_TEST(test_call)
+{
+	uint16_t code[] = {
+		17, 3,
+		21,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+
+	emulate1();
+	ck_assert_uint_eq(pc, 3);
+	ck_assert_uint_eq(stack[0], 2);
+	ck_assert_uint_eq(stack_depth, 1);
+	ck_assert_uint_ge(stack_alloc, 1);
+
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_ret)
+{
+	uint16_t code[] = {
+		17, 3,
+		0,
+		18,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+
+	emulate1();
+	ck_assert_uint_eq(pc, 3);
+	ck_assert_uint_eq(stack[0], 2);
+	ck_assert_uint_eq(stack_depth, 1);
+	ck_assert_uint_ge(stack_alloc, 1);
+
+	emulate1();
+	ck_assert_uint_eq(pc, 2);
+	ck_assert_uint_eq(stack_depth, 0);
+	ck_assert_uint_ge(stack_alloc, 0);
+
+	emulate1();
+	ck_assert_uint_eq(pc, 3);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
 Suite *
 suite_instr(void)
 {
@@ -334,12 +434,14 @@ suite_instr(void)
 	tcase_add_test(t, test_out);
 	suite_add_tcase(s, t);
 
-	t = tcase_create("jmp");
+	t = tcase_create("flowcontrol");
 	tcase_add_checked_fixture(t, init, destroy);
+	tcase_add_test(t, test_call);
 	tcase_add_test(t, test_jmp);
 	tcase_add_test(t, test_jmp_reg);
 	tcase_add_test(t, test_jf);
 	tcase_add_test(t, test_jt);
+	tcase_add_test(t, test_ret);
 	suite_add_tcase(s, t);
 
 	t = tcase_create("basic");
@@ -352,6 +454,9 @@ suite_instr(void)
 	t = tcase_create("math");
 	tcase_add_checked_fixture(t, init, destroy);
 	tcase_add_test(t, test_add);
+	tcase_add_test(t, test_and);
+	tcase_add_test(t, test_not);
+	tcase_add_test(t, test_or);
 	suite_add_tcase(s, t);
 
 	t = tcase_create("stack");

@@ -32,6 +32,31 @@ modmath(uint16_t val)
 	return (val & 0x7fff);
 }
 
+static uint16_t
+popval(uint16_t instr)
+{
+
+	if (stack_depth == 0)
+		illins(instr);
+	return (stack[--stack_depth]);
+}
+
+static void
+pushval(uint16_t val)
+{
+
+	if (stack_depth == stack_alloc) {
+		if (stack_alloc == 0)
+			stack_alloc = 4096 / sizeof(*stack);
+		else
+			stack_alloc = stack_alloc * 2;
+
+		stack = realloc(stack, stack_alloc * sizeof(*stack));
+		ASSERT(stack != NULL, "realloc");
+	}
+	stack[stack_depth++] = val;
+}
+
 void
 instr_add(struct instr_decode_common *idc)
 {
@@ -42,6 +67,31 @@ instr_add(struct instr_decode_common *idc)
 	src2 = getinput(idc->instr, idc->args[2]);
 
 	setreg(idc->instr, dst, modmath(src1 + src2));
+}
+
+void
+instr_and(struct instr_decode_common *idc)
+{
+	uint16_t src1, src2, dst;
+
+	dst = idc->args[0];
+	src1 = getinput(idc->instr, idc->args[1]);
+	src2 = getinput(idc->instr, idc->args[2]);
+
+	setreg(idc->instr, dst, src1 & src2);
+}
+
+void
+instr_call(struct instr_decode_common *idc)
+{
+	uint16_t dst;
+
+	dst = getinput(idc->instr, idc->args[0]);
+
+	pushval(pc + 2);
+
+	/* Decrement by size of jmp <a> instruction */
+	pc = dst - 2;
 }
 
 void
@@ -135,6 +185,29 @@ instr_nop(struct instr_decode_common *idc __unused)
 }
 
 void
+instr_not(struct instr_decode_common *idc)
+{
+	uint16_t src, dst;
+
+	dst = idc->args[0];
+	src = getinput(idc->instr, idc->args[1]);
+
+	setreg(idc->instr, dst, modmath(~src));
+}
+
+void
+instr_or(struct instr_decode_common *idc)
+{
+	uint16_t src1, src2, dst;
+
+	dst = idc->args[0];
+	src1 = getinput(idc->instr, idc->args[1]);
+	src2 = getinput(idc->instr, idc->args[2]);
+
+	setreg(idc->instr, dst, src1 | src2);
+}
+
+void
 instr_out(struct instr_decode_common *idc)
 {
 
@@ -147,8 +220,7 @@ instr_pop(struct instr_decode_common *idc)
 	uint16_t dst;
 
 	dst = idc->args[0];
-
-	setreg(idc->instr, dst, stack[--stack_depth]);
+	setreg(idc->instr, dst, popval(idc->instr));
 }
 
 void
@@ -157,18 +229,17 @@ instr_push(struct instr_decode_common *idc)
 	uint16_t src;
 
 	src = getinput(idc->instr, idc->args[0]);
+	pushval(src);
+}
 
-	if (stack_depth == stack_alloc) {
-		if (stack_alloc == 0)
-			stack_alloc = 4096 / sizeof(*stack);
-		else
-			stack_alloc = stack_alloc * 2;
+void
+instr_ret(struct instr_decode_common *idc)
+{
+	uint16_t dst;
 
-		stack = realloc(stack, stack_alloc * sizeof(*stack));
-		ASSERT(stack != NULL, "realloc");
-	}
-
-	stack[stack_depth++] = src;
+	dst = popval(idc->instr);
+	/* Decrement by size of ret instruction */
+	pc = dst - 1;
 }
 
 void
