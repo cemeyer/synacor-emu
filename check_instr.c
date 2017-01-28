@@ -86,6 +86,7 @@ START_TEST(test_out)
 		19, 'h',
 		19, 'i',
 		19, '\n',
+		19, REG(0),
 		0,
 	};
 
@@ -106,8 +107,13 @@ START_TEST(test_out)
 	ck_assert_uint_eq(pc, PC_START + 6);
 	check_out_contents(3, "hi\n");
 
+	regs[0] = 'a';
 	emulate1();
-	ck_assert_uint_eq(pc, PC_START + 7);
+	ck_assert_uint_eq(pc, PC_START + 8);
+	check_out_contents(4, "hi\na");
+
+	emulate1();
+	ck_assert_uint_eq(pc, PC_START + 9);
 	ck_assert_uint_eq(halted, true);
 }
 END_TEST

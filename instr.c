@@ -248,8 +248,10 @@ instr_or(struct instr_decode_common *idc)
 void
 instr_out(struct instr_decode_common *idc)
 {
+	char c;
 
-	fputc((char)idc->args[0], outfile);
+	c = getinput(idc->instr, idc->args[0]);
+	fputc(c, outfile);
 }
 
 void
