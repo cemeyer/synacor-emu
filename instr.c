@@ -14,6 +14,17 @@ getinput(uint16_t instr, uint16_t literal)
 	illins(instr);
 }
 
+static void
+setreg(uint16_t instr, uint16_t dst, uint16_t src)
+{
+
+	if (dst < 32768 || dst > 32775)
+		illins(instr);
+
+	dst -= 32768;
+	regs[dst] = src;
+}
+
 void
 instr_halt(struct instr_decode_common *idc __unused)
 {
@@ -30,6 +41,43 @@ instr_jmp(struct instr_decode_common *idc)
 
 	/* Decrement by size of jmp <a> instruction */
 	pc = dst - 2;
+}
+
+void
+instr_jf(struct instr_decode_common *idc)
+{
+	uint16_t cnd, dst;
+
+	cnd = getinput(idc->instr, idc->args[0]);
+	dst = getinput(idc->instr, idc->args[1]);
+
+	/* Decrement by size of jf <a> <b> instruction */
+	if (cnd == 0)
+		pc = dst - 3;
+}
+
+void
+instr_jt(struct instr_decode_common *idc)
+{
+	uint16_t cnd, dst;
+
+	cnd = getinput(idc->instr, idc->args[0]);
+	dst = getinput(idc->instr, idc->args[1]);
+
+	/* Decrement by size of jt <a> <b> instruction */
+	if (cnd != 0)
+		pc = dst - 3;
+}
+
+void
+instr_ld(struct instr_decode_common *idc)
+{
+	uint16_t src, dst;
+
+	dst = idc->args[0];
+	src = getinput(idc->instr, idc->args[1]);
+
+	setreg(idc->instr, dst, src);
 }
 
 void

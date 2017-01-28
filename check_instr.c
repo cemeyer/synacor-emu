@@ -4,6 +4,7 @@
 #include "test.h"
 
 #define	PC_START		0
+#define	REG(x)	(32768 + x)
 
 /* Make it harder to forget to add tests to suite. */
 #pragma GCC diagnostic error "-Wunused-function"
@@ -128,6 +129,78 @@ START_TEST(test_jmp)
 }
 END_TEST
 
+START_TEST(test_jmp_reg)
+{
+	uint16_t code[] = {
+		6, REG(0),
+		21,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	regs[0] = 3;
+	emulate1();
+	ck_assert_uint_eq(pc, 3);
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_jf)
+{
+	uint16_t code[] = {
+		8, 0, 4,
+		21,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	emulate1();
+	ck_assert_uint_eq(pc, 5);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_jt)
+{
+	uint16_t code[] = {
+		7, 1, 4,
+		21,
+		7, 0, 0,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	emulate1();
+	ck_assert_uint_eq(pc, 7);
+	emulate1();
+	ck_assert_uint_eq(pc, 8);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_ld)
+{
+	uint16_t code[] = {
+		1, REG(0), 5,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 3);
+	ck_assert_uint_eq(regs[0], 5);
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
 Suite *
 suite_instr(void)
 {
@@ -146,6 +219,14 @@ suite_instr(void)
 	t = tcase_create("jmp");
 	tcase_add_checked_fixture(t, init, destroy);
 	tcase_add_test(t, test_jmp);
+	tcase_add_test(t, test_jmp_reg);
+	tcase_add_test(t, test_jf);
+	tcase_add_test(t, test_jt);
+	suite_add_tcase(s, t);
+
+	t = tcase_create("basic");
+	tcase_add_checked_fixture(t, init, destroy);
+	tcase_add_test(t, test_ld);
 	suite_add_tcase(s, t);
 
 	return (s);
