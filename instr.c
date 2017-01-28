@@ -277,9 +277,12 @@ instr_ret(struct instr_decode_common *idc)
 {
 	uint16_t dst;
 
-	dst = popval(idc->instr);
-	/* Decrement by size of ret instruction */
-	pc = dst - 1;
+	if (stack_depth != 0) {
+		dst = popval(idc->instr);
+		/* Decrement by size of ret instruction */
+		pc = dst - 1;
+	} else
+		halted = true;
 }
 
 void
