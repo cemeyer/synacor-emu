@@ -111,6 +111,23 @@ START_TEST(test_out)
 }
 END_TEST
 
+START_TEST(test_jmp)
+{
+	uint16_t code[] = {
+		6, 3,
+		21,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 3);
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
 Suite *
 suite_instr(void)
 {
@@ -124,6 +141,11 @@ suite_instr(void)
 	tcase_add_test(t, test_halt);
 	tcase_add_test(t, test_nop);
 	tcase_add_test(t, test_out);
+	suite_add_tcase(s, t);
+
+	t = tcase_create("jmp");
+	tcase_add_checked_fixture(t, init, destroy);
+	tcase_add_test(t, test_jmp);
 	suite_add_tcase(s, t);
 
 	return (s);

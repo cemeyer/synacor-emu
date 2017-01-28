@@ -49,6 +49,7 @@ extern uint32_t		 pc;
 extern uint32_t		 pc_start;
 extern uint32_t		 instr_size;
 extern bool		 halted;
+extern uint16_t		 regs[8];
 extern uint16_t		 memory[0x10000 / sizeof(uint16_t)];
 extern bool		 replay_mode;
 extern uint64_t		 insns;

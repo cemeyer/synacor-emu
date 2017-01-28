@@ -15,6 +15,7 @@ uint32_t	 pc,
 		 instr_size;
 bool		 halted;
 /* 64kB, word addressed  */
+uint16_t	 regs[8];
 uint16_t	 memory[0x10000 / sizeof(uint16_t)];
 
 /* Emulater auxiliary info */
@@ -33,6 +34,7 @@ GHashTable	*input_record;			// insns -> inprec
 
 // Could easily sort by popularity over time.
 static struct instr_decode synacor_instr[] = {
+	{ 6, 1, instr_jmp },
 	{ 19, 1, instr_out },
 	{ 21, 0, instr_nop },
 	{ 0, 0, instr_halt },
@@ -58,6 +60,7 @@ init(void)
 	insns = 0;
 	halted = false;
 	outfile = stdout;
+	memset(regs, 0, sizeof(regs));
 	start = now();
 	//memset(memory, 0, sizeof(memory));
 }
