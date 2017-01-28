@@ -13,101 +13,29 @@ struct inprec {
 uint32_t	 pc,
 		 pc_start,
 		 instr_size;
-bool		 skip_next_instruction;
-/* 24 bits are addressable in both Data and Program regions */
-uint8_t		 memory[0x1000000];
-/* Program memory is word-addressed */
-uint16_t	 flash[ 0x1000000 / sizeof(uint16_t)];
-
-/* Machine model characteristics */
-bool		 pc22;
-bool		 pc_mem_max_64k;
-bool		 pc_mem_max_256b;
+bool		 halted;
+/* 64kB, word addressed  */
+uint16_t	 memory[0x10000 / sizeof(uint16_t)];
 
 /* Emulater auxiliary info */
 uint64_t	 start;		/* Start time in us */
 uint64_t	 insns;
 uint64_t	 insnlimit;
 uint64_t	 insnreplaylim;
-bool		 off;
 bool		 replay_mode;
 volatile bool	 ctrlc;
 
 bool		 tracehex;
 FILE		*tracefile;
+FILE		*outfile;
 
 GHashTable	*input_record;			// insns -> inprec
 
 // Could easily sort by popularity over time.
-static struct instr_decode avr_instr[] = {
-	{ 0x0000, 0xffff, instr_nop },
-	{ 0x0100, 0xff00, instr_movw, .dddd74 = true, .rrrr30 = true },
-	{ 0x0200, 0xff00, instr_muls, .dddd74 = true, .rrrr30 = true },
-	{ 0x0300, 0xff88, instr_mulsu, .ddd64 = true, .rrr20 = true },
-	{ 0x0308, 0xff88, instr_fmul, .ddd64 = true, .rrr20 = true },
-	{ 0x0380, 0xff80, instr_fmulsu, .ddd64 = true, .rrr20 = true },
-	{ 0x0400, 0xec00, instr_cpc, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x0800, 0xec00, instr_cpc, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x0c00, 0xec00, instr_adc, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x1000, 0xfc00, instr_cpse, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x2000, 0xfc00, instr_and, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x2400, 0xfc00, instr_xor, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x2800, 0xfc00, instr_or, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x2c00, 0xfc00, instr_mov, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0x3000, 0xf000, instr_cpi, .dddd74 = true, .KKKK118_30 = true },
-	{ 0x4000, 0xe000, instr_cpi, .dddd74 = true, .KKKK118_30 = true },
-	{ 0x6000, 0xf000, instr_ori, .dddd74 = true, .KKKK118_30 = true },
-	{ 0x7000, 0xf000, instr_andi, .dddd74 = true, .KKKK118_30 = true },
-	{ 0x8000, 0xd200, instr_ldyz, .ddddd84 = true },
-	{ 0x8200, 0xd200, instr_styz, .ddddd84 = true },
-	{ 0x9000, 0xfe0f, instr_lds, .ddddd84 = true, .imm16 = true },
-	{ 0x9001, 0xfe07, instr_ldyz, .ddddd84 = true },
-	{ 0x9002, 0xfe07, instr_ldyz, .ddddd84 = true },
-	{ 0x9004, 0xfe0c, instr_elpmz, .ddddd84 = true },
-	{ 0x900c, 0xfe0e, instr_ldx, .ddddd84 = true },
-	{ 0x900e, 0xfe0f, instr_ldx, .ddddd84 = true },
-	{ 0x900f, 0xfe0f, instr_pop, .ddddd84 = true },
-	{ 0x9200, 0xfe0f, instr_sts, .ddddd84 = true, .imm16 = true },
-	{ 0x9201, 0xfe07, instr_styz, .ddddd84 = true },
-	{ 0x9202, 0xfe07, instr_styz, .ddddd84 = true },
-	{ 0x9204, 0xfe0c, instr_xch, .ddddd84 = true },
-	{ 0x920c, 0xfe0e, instr_stx, .ddddd84 = true },
-	{ 0x920e, 0xfe0f, instr_stx, .ddddd84 = true },
-	{ 0x920f, 0xfe0f, instr_push, .ddddd84 = true },
-	{ 0x9400, 0xfe0f, instr_com, .ddddd84 = true },
-	{ 0x9401, 0xfe0f, instr_neg, .ddddd84 = true },
-	{ 0x9402, 0xfe0f, instr_swap, .ddddd84 = true },
-	{ 0x9403, 0xfe0f, instr_inc, .ddddd84 = true },
-	{ 0x9405, 0xfe0f, instr_asr, .ddddd84 = true },
-	{ 0x9406, 0xfe0f, instr_lsr, .ddddd84 = true },
-	{ 0x9407, 0xfe0f, instr_ror, .ddddd84 = true },
-	{ 0x9408, 0xff0f, instr_bclrset, .ddd64 = true },
-	{ 0x940a, 0xfe0f, instr_dec, .ddddd84 = true },
-	{ 0x940b, 0xff0f, instr_des, .dddd74 = true },
-	{ 0x940c, 0xfe0e, instr_jmp, .imm16 = true },
-	{ 0x940e, 0xfe0e, instr_call, .imm16 = true },
-	{ 0x9508, 0xffff, instr_ret },
-	{ 0x9409, 0xfeef, instr_eicalljump },
-	{ 0x9518, 0xffff, instr_reti },
-	{ 0x9588, 0xffff, instr_unimp/*SLEEP*/ },
-	{ 0x9598, 0xffff, instr_unimp/*BREAK*/ },
-	{ 0x95a8, 0xffff, instr_unimp/*WDR*/ },
-	{ 0x95c8, 0xffef, instr_elpm },
-	{ 0x95e8, 0xffff, instr_unimp/*SPM*/ },
-	{ 0x95f8, 0xffff, instr_unimp/*SPM Z+*/ },
-	{ 0x9600, 0xff00, instr_adiw },
-	{ 0x9700, 0xff00, instr_sbiw },
-	{ 0x9800, 0xfd00, instr_cbisbi, .rrr20 = true },
-	{ 0x9900, 0xfd00, instr_sbics, .rrr20 = true },
-	{ 0x9c00, 0xfc00, instr_mul, .ddddd84 = true, .rrrrr9_30 = true },
-	{ 0xb000, 0xf800, instr_in, .ddddd84 = true },
-	{ 0xb800, 0xf800, instr_out, .ddddd84 = true },
-	{ 0xc000, 0xe000, instr_rcalljmp },
-	{ 0xe000, 0xf000, instr_ldi, .dddd74 = true, .KKKK118_30 = true },
-	{ 0xf000, 0xf800, instr_brb, .rrr20 = true },
-	{ 0xf800, 0xfe08, instr_bld, .ddddd84 = true, .rrr20 = true },
-	{ 0xfa00, 0xfe08, instr_bst, .ddddd84 = true, .rrr20 = true },
-	{ 0xfc00, 0xfc08, instr_sbrcs, .ddddd84 = true, .rrr20 = true },
+static struct instr_decode synacor_instr[] = {
+	{ 19, 1, instr_out },
+	{ 21, 0, instr_nop },
+	{ 0, 0, instr_halt },
 };
 
 void
@@ -127,12 +55,9 @@ init(void)
 {
 
 	pc = 0;
-	pc22 = false;
-	pc_mem_max_256b = false;
-	pc_mem_max_64k = false;
 	insns = 0;
-	off = false;
-	skip_next_instruction = false;
+	halted = false;
+	outfile = stdout;
 	start = now();
 	//memset(memory, 0, sizeof(memory));
 }
@@ -151,89 +76,6 @@ ctrlc_handler(int s)
 	ctrlc = true;
 }
 
-/*
- * E.g., https://www.stockfighter.io/trainer/resource/level_1.od
- */
-static FILE *
-objdump_to_rom(FILE *od)
-{
-	FILE *res, *trans;
-	const char *tab1, *tab2, *t;
-	char *buf, *line;
-	size_t sz, wr, linecap;
-	ssize_t rd;
-	unsigned lineoff, b;
-	int rc;
-
-	trans = open_memstream(&buf, &sz);
-	ASSERT(trans, "open_memstream");
-
-	line = NULL;
-	linecap = 0;
-
-	while (true) {
-		errno = 0;
-		rd = getline(&line, &linecap, od);
-		if (rd < 0) {
-			ASSERT(errno == 0, "getline: %d:%s", errno,
-			    strerror(errno));
-			break;
-		}
-
-		/* Skip empty lines */
-		if (rd < 2)
-			continue;
-		/* Lines we care about start with spaces */
-		if (line[0] != ' ')
-			continue;
-
-		/* Scan the offset and seek to it in the output memstream */
-		rc = sscanf(line, " %x: ", &lineoff);
-		if (rc != 1) {
-			printf("Skipping unexpected line:%s\n", line);
-			continue;
-		}
-		ASSERT(lineoff < UINT16_MAX, "lineoff: %u", lineoff);
-
-		rc = fseeko(trans, lineoff, SEEK_SET);
-		ASSERT(rc == 0, "fseeko");
-
-		/* Find the data for this line */
-		tab1 = strchr(line, '\t');
-		if (tab1 == NULL) {
-			printf("Skipping unexpected line2:%s\n", line);
-			continue;
-		}
-		tab1++;
-
-		tab2 = strstr(tab1, "  ");
-		if (tab2 == NULL)
-			tab2 = strchr(tab1, '\t');
-		if (tab2 == NULL) {
-			printf("Skipping unexpected line3:%s\n", line);
-			continue;
-		}
-
-		for (t = tab1; t < tab2; t += 3) {
-			rc = sscanf(t, "%02x", &b);
-			if (rc != 1)
-				break;
-			ASSERT(b <= UINT8_MAX, "range");
-
-			rc = fputc(b, trans);
-			ASSERT(rc != EOF, "fputc");
-		}
-	}
-
-	free(line);
-	fclose(od);
-	fclose(trans);
-
-	res = fmemopen(buf, sz, "rb");
-	ASSERT(res != NULL, "fmemopen");
-	return (res);
-}
-
 void
 usage(void)
 {
@@ -242,7 +84,6 @@ usage(void)
 		"  FLAGS:\n"
 		"    -l=<N>        Limit execution to N instructions\n"
 		"    -t=TRACEFILE  Emit instruction trace\n"
-		"    -T            binaryimage is in objdump text format\n"
 		"    -x            Trace output in hex\n");
 	exit(1);
 }
@@ -254,7 +95,6 @@ main(int argc, char **argv)
 	const char *romfname;
 	FILE *romfile;
 	int opt;
-	bool textformat = false;
 
 	if (argc < 2)
 		usage();
@@ -271,9 +111,6 @@ main(int argc, char **argv)
 				    optarg);
 				exit(1);
 			}
-			break;
-		case 'T':
-			textformat = true;
 			break;
 		case 'x':
 			tracehex = true;
@@ -292,9 +129,6 @@ main(int argc, char **argv)
 	romfile = fopen(romfname, "rb");
 	ASSERT(romfile, "fopen");
 
-	if (textformat)
-		romfile = objdump_to_rom(romfile);
-
 	input_record = g_hash_table_new_full(NULL, NULL, NULL, free);
 	ASSERT(input_record, "x");
 
@@ -302,8 +136,8 @@ main(int argc, char **argv)
 
 	idx = 0;
 	while (true) {
-		rd = fread(&flash[idx], sizeof(flash[0]),
-		    ARRAYLEN(flash) - idx, romfile);
+		rd = fread(&memory[idx], sizeof(memory[0]),
+		    ARRAYLEN(memory) - idx, romfile);
 		if (rd == 0)
 			break;
 		idx += rd;
@@ -314,10 +148,9 @@ main(int argc, char **argv)
 	signal(SIGINT, ctrlc_handler);
 
 	pc = 0;
-
 	emulate();
 
-	printf("Got CPUOFF, stopped.\n");
+	printf("Got HALT, stopped.\n");
 
 	print_regs();
 	print_ips();
@@ -334,65 +167,28 @@ emulate1(void)
 {
 	struct instr_decode_common idc;
 	uint16_t instr;
-	size_t i;
+	size_t i, j;
 
-restart:
 	pc_start = pc;
 	instr_size = 1;
 
-	instr = romword(pc);
+	instr = memory[pc];
 
-	for (i = 0; i < ARRAYLEN(avr_instr); i++)
-		if ((instr & avr_instr[i].mask) == avr_instr[i].pattern)
+	for (i = 0; i < ARRAYLEN(synacor_instr); i++)
+		if (synacor_instr[i].icode == instr)
 			break;
 
-	if (i == ARRAYLEN(avr_instr))
+	if (i == ARRAYLEN(synacor_instr))
 		illins(instr);
 
 	memset(&idc, 0, sizeof(idc));
 	idc.instr = instr;
-
-	if (avr_instr[i].imm16) {
-		idc.imm_u16 = romword(pc + 1);
+	for (j = 0; j < synacor_instr[i].arguments; j++) {
+		idc.args[j] = memory[pc + 1 + j];
 		instr_size++;
 	}
 
-	/*
-	 * After our CPSE, we've done enough decoding to figure out if this is
-	 * a 16-bit or 32-bit instruction.
-	 */
-	if (skip_next_instruction) {
-		skip_next_instruction = false;
-		pc += instr_size;
-		return;
-	}
-
-	if (avr_instr[i].ddddd84)
-		idc.ddddd = bits(instr, 8, 4) >> 4;
-	if (avr_instr[i].dddd74)
-		idc.ddddd = 16 + (bits(instr, 7, 4) >> 4);
-	if (avr_instr[i].ddd64)
-		idc.ddddd = 16 + (bits(instr, 6, 4) >> 4);
-
-	if (avr_instr[i].rrrrr9_30)
-		idc.rrrrr = (bits(instr, 9, 9) >> 5) | bits(instr, 3, 0);
-	if (avr_instr[i].rrrr30)
-		idc.rrrrr = 16 + bits(instr, 3, 0);
-	if (avr_instr[i].rrr20)
-		idc.rrrrr = 16 + bits(instr, 2, 0);
-
-	if (avr_instr[i].KKKK118_30)
-		idc.imm_u8 = (bits(instr, 11, 8) >> 4) | bits(instr, 3, 0);
-
-	avr_instr[i].code(&idc);
-
-#ifndef	REALLYFAST
-	ASSERT((idc.clrflags & idc.setflags) == 0, "overlapped flags: 0x%02x",
-	    (unsigned)(idc.clrflags & idc.setflags));
-#endif
-	memory[SREG] &= ~idc.clrflags;
-	memory[SREG] |= idc.setflags;
-
+	synacor_instr[i].code(&idc);
 	pc += instr_size;
 
 	if (!replay_mode && tracefile) {
@@ -402,7 +198,7 @@ restart:
 		for (i = 0; i < instr_size; i++) {
 			uint16_t word;
 
-			word = romword(pc_start + i);
+			word = memory[pc_start + i];
 			if (tracehex)
 				fprintf(tracefile, "%04x ", (uns)word);
 			else {
@@ -416,21 +212,14 @@ restart:
 	}
 
 	insns++;
-
-	/*
-	 * We need to do instruction decode on the *next* instruction to figure
-	 * out where PC should be after *this* instruction.
-	 */
-	if (skip_next_instruction)
-		goto restart;
 }
 
 static void
 dumpmem(uint16_t addr, unsigned len)
 {
 
-	for (unsigned i = 0; i < len; i++) {
-		printf("%02x", membyte(addr+i));
+	for (unsigned i = 0; i < len / 2; i++) {
+		printf("%04x", memory[addr + i]);
 		if (i % 0x10 == 0xf)
 			printf("\n");
 	}
@@ -465,12 +254,12 @@ emulate(void)
 		}
 #endif
 
-		if (off)
+		if (halted)
 			break;
 
 		emulate1();
 
-		if (off)
+		if (halted)
 			break;
 
 		if (insnlimit && insns >= insnlimit) {
@@ -488,7 +277,7 @@ _unhandled(const char *f, unsigned l, uint16_t instr)
 	    f, l, (unsigned)instr, (unsigned)pc_start);
 	printf("Raw at PC: ");
 	for (unsigned i = 0; i < 3; i++)
-		printf("%04x", flash[pc_start + i]);
+		printf("%04x", memory[pc_start + i]);
 	printf("\n");
 	abort_nodump();
 }
@@ -501,7 +290,7 @@ _illins(const char *f, unsigned l, uint16_t instr)
 	    f, l, (unsigned)instr, (unsigned)pc_start);
 	printf("Raw at PC: ");
 	for (unsigned i = 0; i < 3; i++)
-		printf("%04x", flash[pc_start + i]);
+		printf("%04x", memory[pc_start + i]);
 	printf("\n");
 	abort_nodump();
 }
@@ -516,6 +305,7 @@ abort_nodump(void)
 	exit(1);
 }
 
+#if 0
 static void
 printmemword(const char *pre, uint16_t addr)
 {
@@ -525,7 +315,6 @@ printmemword(const char *pre, uint16_t addr)
 	printf("%02x", membyte(addr + 1));
 }
 
-#if 0
 static void
 printreg(unsigned reg)
 {
@@ -606,7 +395,6 @@ getsn(uint16_t addr, uint16_t bufsz)
 	struct inprec *prev_inp;
 	char *buf;
 
-	// XXX RAMEND or 24-bit at least
 	ASSERT((size_t)addr + bufsz < 0xffff, "overflow");
 	//memset(&memory[addr], 0, bufsz);
 
