@@ -58,6 +58,7 @@ extern bool		 replay_mode;
 extern uint64_t		 insns;
 extern uint64_t		 insnreplaylim;
 extern uint64_t		 insnlimit;
+extern FILE		*infile;
 extern FILE		*outfile;
 
 void		 abort_nodump(void) __dead2;

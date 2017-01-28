@@ -32,6 +32,7 @@ volatile bool	 ctrlc;
 bool		 tracehex;
 FILE		*tracefile;
 FILE		*outfile;
+FILE		*infile;
 
 GHashTable	*input_record;			// insns -> inprec
 
@@ -57,6 +58,7 @@ static struct instr_decode synacor_instr[] = {
 	{ 17, 1, instr_call },
 	{ 18, 0, instr_ret },
 	{ 19, 1, instr_out },
+	{ 20, 1, instr_in },
 	{ 21, 0, instr_nop },
 };
 
@@ -79,6 +81,7 @@ init(void)
 	pc = 0;
 	insns = 0;
 	halted = false;
+	infile = stdin;
 	outfile = stdout;
 	memset(regs, 0, sizeof(regs));
 	stack_depth = stack_alloc = 0;

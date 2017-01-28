@@ -132,6 +132,18 @@ instr_halt(struct instr_decode_common *idc __unused)
 }
 
 void
+instr_in(struct instr_decode_common *idc)
+{
+	int rc;
+
+	rc = fgetc(infile);
+	if (rc == EOF)
+		illins(idc->instr);
+
+	setreg(idc->instr, idc->args[0], (char)rc);
+}
+
+void
 instr_jmp(struct instr_decode_common *idc)
 {
 	uint16_t dst;

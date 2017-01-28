@@ -20,6 +20,7 @@ void instr_call(struct instr_decode_common *);
 void instr_eq(struct instr_decode_common *);
 void instr_gt(struct instr_decode_common *);
 void instr_halt(struct instr_decode_common *);
+void instr_in(struct instr_decode_common *);
 void instr_jmp(struct instr_decode_common *);
 void instr_jf(struct instr_decode_common *);
 void instr_jt(struct instr_decode_common *);

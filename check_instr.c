@@ -112,6 +112,44 @@ START_TEST(test_out)
 }
 END_TEST
 
+START_TEST(test_in)
+{
+	uint16_t code[] = {
+		20, REG(0),
+		20, REG(1),
+		20, REG(2),
+		0,
+	};
+	size_t wr;
+	int rc;
+
+	install_words(code, PC_START, sizeof(code));
+
+	infile = fmemopen(NULL, 10, "w+");
+	wr = fwrite("hi\n", 1, 3, infile);
+	ck_assert_uint_eq(wr, 3);
+
+	rc = fseeko(infile, 0, SEEK_SET);
+	ck_assert_int_eq(rc, 0);
+
+	emulate1();
+	ck_assert_uint_eq(pc, PC_START + 2);
+	ck_assert_uint_eq(regs[0], 'h');
+
+	emulate1();
+	ck_assert_uint_eq(pc, PC_START + 4);
+	ck_assert_uint_eq(regs[1], 'i');
+
+	emulate1();
+	ck_assert_uint_eq(pc, PC_START + 6);
+	ck_assert_uint_eq(regs[2], '\n');
+
+	emulate1();
+	ck_assert_uint_eq(pc, PC_START + 7);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
 START_TEST(test_jmp)
 {
 	uint16_t code[] = {
@@ -499,6 +537,7 @@ suite_instr(void)
 	t = tcase_create("print");
 	tcase_add_checked_fixture(t, init, destroy);
 	tcase_add_test(t, test_halt);
+	tcase_add_test(t, test_in);
 	tcase_add_test(t, test_nop);
 	tcase_add_test(t, test_out);
 	suite_add_tcase(s, t);
