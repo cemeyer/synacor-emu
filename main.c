@@ -1,4 +1,7 @@
+#include <fcntl.h>
 #include <unistd.h>
+
+#include <zlib.h>
 
 #include "emu.h"
 #include "instr.h"
@@ -106,6 +109,114 @@ ctrlc_handler(int s)
 	ctrlc = true;
 }
 
+static void
+writes(int fd, const char *str)
+{
+
+	(void)write(fd, str, strlen(str));
+}
+
+static void
+write_errno(int fd)
+{
+	char buf[11];
+	size_t len;
+	int error;
+
+	error = errno;
+	for (len = 0; error != 0; len++) {
+		buf[len] = "0123456789"[error % 10];
+		error /= 10;
+	}
+
+	for (; len > 0; len--)
+		(void)write(fd, &buf[len - 1], 1);
+}
+
+static int
+writeall(int fd, const void *buf, size_t len)
+{
+	size_t written;
+	ssize_t rc;
+
+	for (written = 0; written < len; written += (size_t)rc) {
+		rc = write(fd, (const char *)buf + written,
+		    len - written);
+		if (rc < 0)
+			return (rc);
+	}
+	return (0);
+}
+
+static void
+save_handler(int s)
+{
+	size_t written;
+	ssize_t rc;
+	uint64_t sd_tmp;
+	uint32_t crc, pc_tmp;
+	int fd;
+
+	(void)s;
+
+	fd = open("synacor.save", O_CREAT | O_EXCL | O_WRONLY, 0600);
+	if (fd < 0) {
+		writes(STDERR_FILENO, "Failed to open synacor.save: ");
+		if (errno == EEXIST)
+			writes(STDERR_FILENO,
+			    "file already exists; refusing to overwrite.");
+		else
+			write_errno(STDERR_FILENO);
+		writes(STDERR_FILENO, "\n");
+		return;
+	}
+
+	/*
+	 * File format is:
+	 *
+	 * stack_depth:u64 || pc:u32 || crc32:u32 || memory[] || regs[] || stack[]
+	 */
+	sd_tmp = stack_depth;
+	rc = writeall(fd, &sd_tmp, sizeof(sd_tmp));
+	if (rc < 0)
+		goto out;
+	pc_tmp = pc;
+	rc = writeall(fd, &pc_tmp, sizeof(pc_tmp));
+	if (rc < 0)
+		goto out;
+
+	/* Checksum over: stack_depth || pc || memory || regs || stack */
+	crc = crc32(0, (void *)&sd_tmp, sizeof(sd_tmp));
+	crc = crc32(crc, (void *)&pc_tmp, sizeof(pc_tmp));
+	crc = crc32(crc, (void *)memory, sizeof(memory));
+	crc = crc32(crc, (void *)regs, sizeof(regs));
+	crc = crc32(crc, (void *)stack, stack_depth * sizeof(*stack));
+	rc = writeall(fd, &crc, sizeof(crc));
+	if (rc < 0)
+		goto out;
+
+	rc = writeall(fd, memory, sizeof(memory));
+	if (rc < 0)
+		goto out;
+	rc = writeall(fd, regs, sizeof(regs));
+	if (rc < 0)
+		goto out;
+	rc = writeall(fd, stack, stack_depth * sizeof(*stack));
+	if (rc < 0)
+		goto out;
+
+	writes(STDERR_FILENO, "Saved synacor.save.\n");
+
+out:
+	if (rc < 0) {
+		writes(STDERR_FILENO, "Failed to write synacor.save: ");
+		write_errno(STDERR_FILENO);
+		writes(STDERR_FILENO, "\n");
+	}
+	close(fd);
+	return;
+}
+
 void
 usage(void)
 {
@@ -176,6 +287,7 @@ main(int argc, char **argv)
 
 	fclose(romfile);
 	signal(SIGINT, ctrlc_handler);
+	signal(SIGUSR1, save_handler);
 
 	pc = 0;
 	emulate();

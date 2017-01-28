@@ -28,14 +28,14 @@ FLAGS=		$(WARNFLAGS) $(OTHERFLAGS) $(OPTFLAGS) $(GLIB_FLAGS) $(SSL_FLAGS) $(NEWG
 LDLIBS=		$(GLIB_LDFLAGS) $(SSL_LDFLAGS) $(LDFLAGS)
 
 $(PROG): $(SRCS) $(HDRS)
-	$(CC) $(FLAGS) $(SRCS) -o $@ $(LDLIBS)
+	$(CC) $(FLAGS) $(SRCS) -o $@ -lz $(LDLIBS)
 
 checkrun: checktests
 	./checktests
 
 checkall: checktests $(PROG)
 checktests: $(CHECK_SRCS) $(SRCS) $(CHECK_HDRS) $(HDRS)
-	$(CC) $(FLAGS) -DEMU_CHECK $(CHECK_SRCS) $(SRCS) -o $@ -lcheck $(LDLIBS)
+	$(CC) $(FLAGS) -DEMU_CHECK $(CHECK_SRCS) $(SRCS) -o $@ -lcheck -lz $(LDLIBS)
 
 clean:
 	rm -f checktests synacor-emu
