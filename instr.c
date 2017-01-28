@@ -137,8 +137,10 @@ instr_in(struct instr_decode_common *idc)
 	int rc;
 
 	rc = fgetc(infile);
-	if (rc == EOF)
-		illins(idc->instr);
+	if (rc == EOF) {
+		fprintf(stderr, "Cannot proceed without input.\n");
+		halted = true;
+	}
 
 	setreg(idc->instr, idc->args[0], (char)rc);
 }
