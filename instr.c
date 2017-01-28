@@ -60,6 +60,21 @@ instr_eq(struct instr_decode_common *idc)
 }
 
 void
+instr_gt(struct instr_decode_common *idc)
+{
+	uint16_t src1, src2, dst;
+
+	dst = idc->args[0];
+	src1 = getinput(idc->instr, idc->args[1]);
+	src2 = getinput(idc->instr, idc->args[2]);
+
+	if (src1 > src2)
+		setreg(idc->instr, dst, 1);
+	else
+		setreg(idc->instr, dst, 0);
+}
+
+void
 instr_halt(struct instr_decode_common *idc __unused)
 {
 
@@ -124,6 +139,36 @@ instr_out(struct instr_decode_common *idc)
 {
 
 	fputc((char)idc->args[0], outfile);
+}
+
+void
+instr_pop(struct instr_decode_common *idc)
+{
+	uint16_t dst;
+
+	dst = idc->args[0];
+
+	setreg(idc->instr, dst, stack[--stack_depth]);
+}
+
+void
+instr_push(struct instr_decode_common *idc)
+{
+	uint16_t src;
+
+	src = getinput(idc->instr, idc->args[0]);
+
+	if (stack_depth == stack_alloc) {
+		if (stack_alloc == 0)
+			stack_alloc = 4096 / sizeof(*stack);
+		else
+			stack_alloc = stack_alloc * 2;
+
+		stack = realloc(stack, stack_alloc * sizeof(*stack));
+		ASSERT(stack != NULL, "realloc");
+	}
+
+	stack[stack_depth++] = src;
 }
 
 void

@@ -239,6 +239,86 @@ START_TEST(test_eq)
 }
 END_TEST
 
+START_TEST(test_gt)
+{
+	uint16_t code[] = {
+		5, REG(0), 15, 15,
+		5, REG(0), 16, 15,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(regs[0], 0);
+	emulate1();
+	ck_assert_uint_eq(pc, 8);
+	ck_assert_uint_eq(regs[0], 1);
+	emulate1();
+	ck_assert_uint_eq(pc, 9);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_push)
+{
+	uint16_t code[] = {
+		2, REG(0),
+		2, 15,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	regs[0] = 14123;
+
+	emulate1();
+	ck_assert_uint_eq(pc, 2);
+	ck_assert_uint_eq(stack[0], 14123);
+	ck_assert_uint_eq(stack_depth, 1);
+	ck_assert_uint_ge(stack_alloc, 1);
+
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(stack[0], 14123);
+	ck_assert_uint_eq(stack[1], 15);
+	ck_assert_uint_eq(stack_depth, 2);
+	ck_assert_uint_ge(stack_alloc, 2);
+
+	emulate1();
+	ck_assert_uint_eq(pc, 5);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_pop)
+{
+	uint16_t code[] = {
+		2, REG(0),
+		3, REG(1),
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	regs[0] = 14123;
+
+	emulate1();
+	ck_assert_uint_eq(pc, 2);
+	ck_assert_uint_eq(stack[0], 14123);
+	ck_assert_uint_eq(stack_depth, 1);
+	ck_assert_uint_ge(stack_alloc, 1);
+
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(regs[1], 14123);
+	ck_assert_uint_eq(stack_depth, 0);
+	ck_assert_uint_ge(stack_alloc, 0);
+
+	emulate1();
+	ck_assert_uint_eq(pc, 5);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
 Suite *
 suite_instr(void)
 {
@@ -265,12 +345,19 @@ suite_instr(void)
 	t = tcase_create("basic");
 	tcase_add_checked_fixture(t, init, destroy);
 	tcase_add_test(t, test_eq);
+	tcase_add_test(t, test_gt);
 	tcase_add_test(t, test_ld);
 	suite_add_tcase(s, t);
 
 	t = tcase_create("math");
 	tcase_add_checked_fixture(t, init, destroy);
 	tcase_add_test(t, test_add);
+	suite_add_tcase(s, t);
+
+	t = tcase_create("stack");
+	tcase_add_checked_fixture(t, init, destroy);
+	tcase_add_test(t, test_pop);
+	tcase_add_test(t, test_push);
 	suite_add_tcase(s, t);
 
 	return (s);

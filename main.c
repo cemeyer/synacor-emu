@@ -17,6 +17,9 @@ bool		 halted;
 /* 64kB, word addressed  */
 uint16_t	 regs[8];
 uint16_t	 memory[0x10000 / sizeof(uint16_t)];
+uint16_t	*stack;
+size_t		 stack_depth;
+size_t		 stack_alloc;
 
 /* Emulater auxiliary info */
 uint64_t	 start;		/* Start time in us */
@@ -36,7 +39,10 @@ GHashTable	*input_record;			// insns -> inprec
 static struct instr_decode synacor_instr[] = {
 	{ 0, 0, instr_halt },
 	{ 1, 2, instr_ld },
+	{ 2, 1, instr_push },
+	{ 3, 1, instr_pop },
 	{ 4, 3, instr_eq },
+	{ 5, 3, instr_gt },
 	{ 6, 1, instr_jmp },
 	{ 7, 2, instr_jt },
 	{ 8, 2, instr_jf },
@@ -66,6 +72,7 @@ init(void)
 	halted = false;
 	outfile = stdout;
 	memset(regs, 0, sizeof(regs));
+	stack_depth = stack_alloc = 0;
 	start = now();
 	//memset(memory, 0, sizeof(memory));
 }
@@ -73,6 +80,9 @@ init(void)
 void
 destroy(void)
 {
+
+	free(stack);
+	stack = NULL;
 }
 
 #ifndef EMU_CHECK
@@ -294,7 +304,7 @@ void __dead2
 _illins(const char *f, unsigned l, uint16_t instr)
 {
 
-	printf("%s:%u: ILLEGAL Instruction: %#04x @PC=%#06x\n",
+	printf("%s:%u: ILLEGAL Instruction: %u @PC=%#06x\n",
 	    f, l, (unsigned)instr, (unsigned)pc_start);
 	printf("Raw at PC: ");
 	for (unsigned i = 0; i < 3; i++)
