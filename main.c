@@ -36,9 +36,11 @@ GHashTable	*input_record;			// insns -> inprec
 static struct instr_decode synacor_instr[] = {
 	{ 0, 0, instr_halt },
 	{ 1, 2, instr_ld },
+	{ 4, 3, instr_eq },
 	{ 6, 1, instr_jmp },
 	{ 7, 2, instr_jt },
 	{ 8, 2, instr_jf },
+	{ 9, 3, instr_add },
 	{ 19, 1, instr_out },
 	{ 21, 0, instr_nop },
 };

@@ -201,6 +201,44 @@ START_TEST(test_ld)
 }
 END_TEST
 
+START_TEST(test_add)
+{
+	uint16_t code[] = {
+		9, REG(0), 32064, 885,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(regs[0], 181);
+	emulate1();
+	ck_assert_uint_eq(pc, 5);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
+START_TEST(test_eq)
+{
+	uint16_t code[] = {
+		4, REG(0), 15, 15,
+		4, REG(0), 15, 2,
+		0,
+	};
+
+	install_words(code, PC_START, sizeof(code));
+	emulate1();
+	ck_assert_uint_eq(pc, 4);
+	ck_assert_uint_eq(regs[0], 1);
+	emulate1();
+	ck_assert_uint_eq(pc, 8);
+	ck_assert_uint_eq(regs[0], 0);
+	emulate1();
+	ck_assert_uint_eq(pc, 9);
+	ck_assert_uint_eq(halted, true);
+}
+END_TEST
+
 Suite *
 suite_instr(void)
 {
@@ -226,7 +264,13 @@ suite_instr(void)
 
 	t = tcase_create("basic");
 	tcase_add_checked_fixture(t, init, destroy);
+	tcase_add_test(t, test_eq);
 	tcase_add_test(t, test_ld);
+	suite_add_tcase(s, t);
+
+	t = tcase_create("math");
+	tcase_add_checked_fixture(t, init, destroy);
+	tcase_add_test(t, test_add);
 	suite_add_tcase(s, t);
 
 	return (s);

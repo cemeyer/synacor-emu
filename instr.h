@@ -14,6 +14,8 @@ struct instr_decode {
 };
 
 
+void instr_add(struct instr_decode_common *);
+void instr_eq(struct instr_decode_common *);
 void instr_halt(struct instr_decode_common *);
 void instr_jmp(struct instr_decode_common *);
 void instr_jf(struct instr_decode_common *);
