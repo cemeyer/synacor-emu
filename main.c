@@ -222,7 +222,7 @@ emulate1(void)
 	pc += instr_size;
 
 	if (!replay_mode && tracefile) {
-		ASSERT(instr_size > 0 && instr_size < 3, "instr_size: %u",
+		ASSERT(instr_size > 0 && instr_size < 5, "instr_size: %u",
 		    (uns)instr_size);
 
 		for (i = 0; i < instr_size; i++) {
