@@ -224,26 +224,119 @@ usage(void)
 		"\n"
 		"  FLAGS:\n"
 		"    -l=<N>        Limit execution to N instructions\n"
+		"    -r            Restore save file binaryimage\n"
 		"    -t=TRACEFILE  Emit instruction trace\n"
 		"    -x            Trace output in hex\n");
 	exit(1);
 }
 
+static size_t
+freadall(void *buf, size_t sz, size_t nelm, FILE *f)
+{
+	size_t rd, idx;
+
+	for (idx = 0; idx < nelm; idx += rd) {
+		rd = fread((char *)buf + (idx * sz), sz, nelm - idx, f);
+		if (rd == 0)
+			break;
+	}
+	return (idx);
+}
+
+static void
+loadrestore(FILE *romfile)
+{
+	const char *error;
+	size_t rd;
+	uint64_t sd;
+	uint32_t crc, computed, pc_tmp;
+
+	/*
+	 * File format is:
+	 *
+	 * stack_depth:u64 || crc32:u32 || memory[] || regs[] || stack[]
+	 */
+
+	error = "short save file";
+	rd = freadall(&sd, sizeof(sd), 1, romfile);
+	if (rd != 1)
+		goto out;
+	rd = freadall(&pc_tmp, sizeof(pc_tmp), 1, romfile);
+	if (rd != 1)
+		goto out;
+	pc = pc_tmp;
+	rd = freadall(&crc, sizeof(crc), 1, romfile);
+	if (rd != 1)
+		goto out;
+	rd = freadall(memory, sizeof(memory[0]), ARRAYLEN(memory), romfile);
+	if (rd != ARRAYLEN(memory))
+		goto out;
+	rd = freadall(regs, sizeof(regs[0]), ARRAYLEN(regs), romfile);
+	if (rd != ARRAYLEN(regs))
+		goto out;
+
+	stack_depth = stack_alloc = sd;
+	stack = realloc(stack, stack_alloc * sizeof(*stack));
+	ASSERT(stack != NULL, "realloc");
+
+	rd = freadall(stack, sizeof(*stack), stack_depth, romfile);
+	if (rd != stack_depth)
+		goto out;
+
+	error = "checksum error";
+	computed = crc32(0, (void *)&sd, sizeof(sd));
+	computed = crc32(computed, (void *)&pc_tmp, sizeof(pc_tmp));
+	computed = crc32(computed, (void *)memory, sizeof(memory));
+	computed = crc32(computed, (void *)regs, sizeof(regs));
+	computed = crc32(computed, (void *)stack, stack_depth * sizeof(*stack));
+	if (computed != crc)
+		goto out;
+
+	error = NULL;
+
+out:
+	if (error != NULL) {
+		fprintf(stderr, "Couldn't read restore file: %s\n", error);
+		exit(1);
+	} else
+		printf("Loaded save file successfully.\n");
+}
+
+static void
+loadrom(FILE *romfile)
+{
+	size_t rd, idx;
+
+	idx = 0;
+	while (true) {
+		rd = fread(&memory[idx], sizeof(memory[0]),
+		    ARRAYLEN(memory) - idx, romfile);
+		if (rd == 0)
+			break;
+		idx += rd;
+	}
+	printf("Loaded %zu words from image.\n", idx);
+}
+
 int
 main(int argc, char **argv)
 {
-	size_t rd, idx;
 	const char *romfname;
 	FILE *romfile;
+	bool restore;
 	int opt;
 
 	if (argc < 2)
 		usage();
 
-	while ((opt = getopt(argc, argv, "gl:t:Tx")) != -1) {
+	restore = false;
+	while ((opt = getopt(argc, argv, "l:rt:x")) != -1) {
 		switch (opt) {
 		case 'l':
 			insnlimit = atoll(optarg);
+			break;
+		case 'r':
+			restore = true;
 			break;
 		case 't':
 			tracefile = fopen(optarg, "wb");
@@ -274,22 +367,15 @@ main(int argc, char **argv)
 	ASSERT(input_record, "x");
 
 	init();
-
-	idx = 0;
-	while (true) {
-		rd = fread(&memory[idx], sizeof(memory[0]),
-		    ARRAYLEN(memory) - idx, romfile);
-		if (rd == 0)
-			break;
-		idx += rd;
-	}
-	printf("Loaded %zu words from image.\n", idx);
-
+	if (restore)
+		loadrestore(romfile);
+	else
+		loadrom(romfile);
 	fclose(romfile);
+
 	signal(SIGINT, ctrlc_handler);
 	signal(SIGUSR1, save_handler);
 
-	pc = 0;
 	emulate();
 
 	printf("Got HALT, stopped.\n");
