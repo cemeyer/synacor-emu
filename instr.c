@@ -180,6 +180,30 @@ instr_ld(struct instr_decode_common *idc)
 }
 
 void
+instr_mod(struct instr_decode_common *idc)
+{
+	uint16_t src1, src2, dst;
+
+	dst = idc->args[0];
+	src1 = getinput(idc->instr, idc->args[1]);
+	src2 = getinput(idc->instr, idc->args[2]);
+
+	setreg(idc->instr, dst, src1 % src2);
+}
+
+void
+instr_mult(struct instr_decode_common *idc)
+{
+	uint16_t src1, src2, dst;
+
+	dst = idc->args[0];
+	src1 = getinput(idc->instr, idc->args[1]);
+	src2 = getinput(idc->instr, idc->args[2]);
+
+	setreg(idc->instr, dst, modmath(src1 * src2));
+}
+
+void
 instr_nop(struct instr_decode_common *idc __unused)
 {
 }
@@ -240,6 +264,30 @@ instr_ret(struct instr_decode_common *idc)
 	dst = popval(idc->instr);
 	/* Decrement by size of ret instruction */
 	pc = dst - 1;
+}
+
+void
+instr_rmem(struct instr_decode_common *idc)
+{
+	uint16_t src, dst;
+
+	dst = idc->args[0];
+	src = getinput(idc->instr, idc->args[1]);
+
+	ASSERT(src < ARRAYLEN(memory), "overflow");
+	setreg(idc->instr, dst, memory[src]);
+}
+
+void
+instr_wmem(struct instr_decode_common *idc)
+{
+	uint16_t src, dst;
+
+	dst = getinput(idc->instr, idc->args[0]);
+	src = getinput(idc->instr, idc->args[1]);
+
+	ASSERT(dst < ARRAYLEN(memory), "overflow");
+	memory[dst] = src;
 }
 
 void

@@ -24,6 +24,8 @@ void instr_jmp(struct instr_decode_common *);
 void instr_jf(struct instr_decode_common *);
 void instr_jt(struct instr_decode_common *);
 void instr_ld(struct instr_decode_common *);
+void instr_mod(struct instr_decode_common *);
+void instr_mult(struct instr_decode_common *);
 void instr_nop(struct instr_decode_common *);
 void instr_not(struct instr_decode_common *);
 void instr_or(struct instr_decode_common *);
@@ -31,6 +33,8 @@ void instr_out(struct instr_decode_common *);
 void instr_pop(struct instr_decode_common *);
 void instr_push(struct instr_decode_common *);
 void instr_ret(struct instr_decode_common *);
+void instr_rmem(struct instr_decode_common *);
+void instr_wmem(struct instr_decode_common *);
 
 void instr_unimp(struct instr_decode_common *);
 
