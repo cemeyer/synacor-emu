@@ -24,7 +24,7 @@ bool		 pc22;
 bool		 pc_mem_max_64k;
 bool		 pc_mem_max_256b;
 
-/* Emulater / GDB auxiliary info */
+/* Emulater auxiliary info */
 uint64_t	 start;		/* Start time in us */
 uint64_t	 insns;
 uint64_t	 insnlimit;
@@ -237,10 +237,9 @@ objdump_to_rom(FILE *od)
 void
 usage(void)
 {
-	printf("usage: avr-emu FLAGS [binaryimage]\n"
+	printf("usage: synacor-emu FLAGS [binaryimage]\n"
 		"\n"
 		"  FLAGS:\n"
-		"    -g            Debug with GDB\n"
 		"    -l=<N>        Limit execution to N instructions\n"
 		"    -t=TRACEFILE  Emit instruction trace\n"
 		"    -T            binaryimage is in objdump text format\n"
@@ -255,16 +254,13 @@ main(int argc, char **argv)
 	const char *romfname;
 	FILE *romfile;
 	int opt;
-	bool waitgdb = false, textformat = false;
+	bool textformat = false;
 
 	if (argc < 2)
 		usage();
 
 	while ((opt = getopt(argc, argv, "gl:t:Tx")) != -1) {
 		switch (opt) {
-		case 'g':
-			waitgdb = true;
-			break;
 		case 'l':
 			insnlimit = atoll(optarg);
 			break;
@@ -318,13 +314,10 @@ main(int argc, char **argv)
 	signal(SIGINT, ctrlc_handler);
 
 	pc = 0;
-	if (waitgdb)
-		gdbstub_init();
 
 	emulate();
 
 	printf("Got CPUOFF, stopped.\n");
-	gdbstub_stopped();
 
 	print_regs();
 	print_ips();
@@ -463,12 +456,7 @@ emulate(void)
 		if (replay_mode && insns >= insnreplaylim) {
 			replay_mode = false;
 			insnreplaylim = 0;
-			// return control to remote GDB
-			stepone = true;
 		}
-
-		if (!replay_mode)
-			gdbstub_intr();
 
 		if (replay_mode && insnreplaylim < insns) {
 			init();
@@ -525,9 +513,6 @@ abort_nodump(void)
 	print_regs();
 	print_ips();
 
-#ifndef EMU_CHECK
-	gdbstub_stopped();
-#endif
 	exit(1);
 }
 

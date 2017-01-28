@@ -1,5 +1,5 @@
-PROG=		avr-emu
-SRCS=		main.c gdbstub.c instr.c
+PROG=		synacor-emu
+SRCS=		main.c instr.c
 HDRS=		emu.h
 CHECK_SRCS=	check_emu.c check_instr.c test_main.c
 CHECK_HDRS=	test.h
@@ -38,4 +38,4 @@ checktests: $(CHECK_SRCS) $(SRCS) $(CHECK_HDRS) $(HDRS)
 	$(CC) $(FLAGS) -DEMU_CHECK $(CHECK_SRCS) $(SRCS) -o $@ -lcheck $(LDLIBS)
 
 clean:
-	rm -f checktests avr-emu
+	rm -f checktests synacor-emu

@@ -20,6 +20,7 @@ teardown(void)
 {
 }
 
+#if 0
 START_TEST(test_nop_trace)
 {
 #define	TRACEF	"nop3.trace"
@@ -45,6 +46,7 @@ START_TEST(test_nop_trace)
 #undef	TRACEF
 }
 END_TEST
+#endif
 
 Suite *
 suite_emu(void)
@@ -56,7 +58,9 @@ suite_emu(void)
 
 	t = tcase_create("trace");
 	tcase_add_checked_fixture(t, setup, teardown);
+#if 0
 	tcase_add_test(t, test_nop_trace);
+#endif
 	suite_add_tcase(s, t);
 
 	return (s);

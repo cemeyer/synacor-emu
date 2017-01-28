@@ -110,13 +110,6 @@ void		 getsn(uint16_t addr, uint16_t len);
 
 void		 print_ips(void);
 
-// GDB stuff
-void		 gdbstub_init(void);
-void		 gdbstub_intr(void);
-void		 gdbstub_stopped(void);
-void		 gdbstub_interactive(void);
-void		 gdbstub_breakpoint(void);
-
 /* Alternative bits() implementation, if the compiler isn't smart enough. */
 #if 0
 #define	_MASK(N)	((1U << (N)) - 1)
