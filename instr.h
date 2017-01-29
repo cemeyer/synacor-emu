@@ -11,6 +11,8 @@ struct instr_decode {
 	uint16_t	  arguments;
 
 	void		(*code)(struct instr_decode_common *);
+
+	const char	 *name;
 };
 
 

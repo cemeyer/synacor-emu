@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -33,6 +34,7 @@ bool		 replay_mode;
 volatile bool	 ctrlc;
 
 bool		 tracehex;
+bool		 tracedisas;
 FILE		*tracefile;
 FILE		*outfile;
 FILE		*infile;
@@ -41,28 +43,28 @@ GHashTable	*input_record;			// insns -> inprec
 
 // Could easily sort by popularity over time.
 static struct instr_decode synacor_instr[] = {
-	{ 0, 0, instr_halt },
-	{ 1, 2, instr_ld },
-	{ 2, 1, instr_push },
-	{ 3, 1, instr_pop },
-	{ 4, 3, instr_eq },
-	{ 5, 3, instr_gt },
-	{ 6, 1, instr_jmp },
-	{ 7, 2, instr_jt },
-	{ 8, 2, instr_jf },
-	{ 9, 3, instr_add },
-	{ 10, 3, instr_mult },
-	{ 11, 3, instr_mod },
-	{ 12, 3, instr_and },
-	{ 13, 3, instr_or },
-	{ 14, 2, instr_not },
-	{ 15, 2, instr_rmem },
-	{ 16, 2, instr_wmem },
-	{ 17, 1, instr_call },
-	{ 18, 0, instr_ret },
-	{ 19, 1, instr_out },
-	{ 20, 1, instr_in },
-	{ 21, 0, instr_nop },
+	{  0, 0, instr_halt, "halt", },
+	{  1, 2, instr_ld,   "mov", },
+	{  2, 1, instr_push, "push", },
+	{  3, 1, instr_pop,  "pop", },
+	{  4, 3, instr_eq,   "eq", },
+	{  5, 3, instr_gt,   "gt", },
+	{  6, 1, instr_jmp,  "jmp", },
+	{  7, 2, instr_jt,   "jt", },
+	{  8, 2, instr_jf,   "jf", },
+	{  9, 3, instr_add,  "add", },
+	{ 10, 3, instr_mult, "mult", },
+	{ 11, 3, instr_mod,  "mod", },
+	{ 12, 3, instr_and,  "and", },
+	{ 13, 3, instr_or,   "or", },
+	{ 14, 2, instr_not,  "not", },
+	{ 15, 2, instr_rmem, "rmem", },
+	{ 16, 2, instr_wmem, "wmem", },
+	{ 17, 1, instr_call, "call", },
+	{ 18, 0, instr_ret,  "ret", },
+	{ 19, 1, instr_out,  "out", },
+	{ 20, 1, instr_in,   "in", },
+	{ 21, 0, instr_nop,  "nop", },
 };
 
 void
@@ -75,6 +77,20 @@ print_ips(void)
 
 	printf("Approx. %ju instructions per second (Total: %ju).\n",
 	    (uintmax_t)insns * 1000000 / (end - start), (uintmax_t)insns);
+}
+
+static void
+printarg(FILE *f, uint16_t val, bool last)
+{
+
+	if (val <= INT16_MAX)
+		fprintf(f, " %u", (uns)val);
+	else if (val < 32776)
+		fprintf(f, " r%u", (uns)val - 32768);
+	else
+		fprintf(f, " invalid#%u", (uns)val);
+	if (!last)
+		fprintf(f, ",");
 }
 
 void
@@ -223,6 +239,7 @@ usage(void)
 	printf("usage: synacor-emu FLAGS [binaryimage]\n"
 		"\n"
 		"  FLAGS:\n"
+		"    -d            Trace output, disassembled\n"
 		"    -l=<N>        Limit execution to N instructions\n"
 		"    -r            Restore save file binaryimage\n"
 		"    -t=TRACEFILE  Emit instruction trace\n"
@@ -330,8 +347,15 @@ main(int argc, char **argv)
 		usage();
 
 	restore = false;
-	while ((opt = getopt(argc, argv, "l:rt:x")) != -1) {
+	while ((opt = getopt(argc, argv, "dl:rt:x")) != -1) {
 		switch (opt) {
+		case 'd':
+			if (tracehex) {
+				printf("-d and -x are mutually exclusive.\n");
+				exit(1);
+			}
+			tracedisas = true;
+			break;
 		case 'l':
 			insnlimit = atoll(optarg);
 			break;
@@ -347,6 +371,10 @@ main(int argc, char **argv)
 			}
 			break;
 		case 'x':
+			if (tracedisas) {
+				printf("-d and -x are mutually exclusive.\n");
+				exit(1);
+			}
 			tracehex = true;
 			break;
 		default:
@@ -423,19 +451,26 @@ emulate1(void)
 		ASSERT(instr_size > 0 && instr_size < 5, "instr_size: %u",
 		    (uns)instr_size);
 
-		for (i = 0; i < instr_size; i++) {
+		for (j = 0; j < instr_size; j++) {
 			uint16_t word;
 
-			word = memory[pc_start + i];
-			if (tracehex)
+			word = memory[pc_start + j];
+			if (tracedisas) {
+				if (j == 0)
+					fprintf(tracefile, "%s",
+					    synacor_instr[i].name);
+				else
+					printarg(tracefile, word,
+					    j == (instr_size - 1));
+			} else if (tracehex) {
 				fprintf(tracefile, "%04x ", (uns)word);
-			else {
+			} else {
 				size_t wr;
 				wr = fwrite(&word, 2, 1, tracefile);
 				ASSERT(wr == 1, "fwrite: %s", strerror(errno));
 			}
 		}
-		if (tracehex)
+		if (tracehex || tracedisas)
 			fprintf(tracefile, "\n");
 	}
 
