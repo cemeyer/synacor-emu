@@ -35,6 +35,7 @@ volatile bool	 ctrlc;
 
 bool		 tracehex;
 bool		 tracedisas;
+bool		 onlydisas;
 FILE		*tracefile;
 FILE		*outfile;
 FILE		*infile;
@@ -240,6 +241,7 @@ usage(void)
 		"\n"
 		"  FLAGS:\n"
 		"    -d            Trace output, disassembled\n"
+		"    -D            Disassemble memory\n"
 		"    -l=<N>        Limit execution to N instructions\n"
 		"    -r            Restore save file binaryimage\n"
 		"    -s=<N>        Set initial value of r7\n"
@@ -350,13 +352,17 @@ main(int argc, char **argv)
 
 	restore = false;
 	r7 = 0;
-	while ((opt = getopt(argc, argv, "dl:rs:t:x")) != -1) {
+	while ((opt = getopt(argc, argv, "Ddl:rs:t:x")) != -1) {
 		switch (opt) {
 		case 'd':
 			if (tracehex) {
 				printf("-d and -x are mutually exclusive.\n");
 				exit(1);
 			}
+			tracedisas = true;
+			break;
+		case 'D':
+			onlydisas = true;
 			tracedisas = true;
 			break;
 		case 'l':
@@ -407,7 +413,11 @@ main(int argc, char **argv)
 		loadrom(romfile);
 	fclose(romfile);
 
-	regs[7] = r7;
+	if (onlydisas) {
+		pc = 0;
+		tracefile = stdout;
+	} else
+		regs[7] = r7;
 
 	signal(SIGINT, ctrlc_handler);
 	signal(SIGUSR1, save_handler);
@@ -442,8 +452,18 @@ emulate1(void)
 		if (synacor_instr[i].icode == instr)
 			break;
 
-	if (i == ARRAYLEN(synacor_instr))
-		illins(instr);
+	if (i == ARRAYLEN(synacor_instr)) {
+		if (!onlydisas)
+			illins(instr);
+
+		printf("%05u: illegal instruction %u", (uns)pc_start,
+		    (uns)instr);
+		if (instr >= 32 && instr < 128)
+			printf(" '%c'", (char)instr);
+		printf("\n");
+		pc++;
+		goto out;
+	}
 
 	memset(&idc, 0, sizeof(idc));
 	idc.instr = instr;
@@ -452,13 +472,16 @@ emulate1(void)
 		instr_size++;
 	}
 
-	synacor_instr[i].code(&idc);
+	if (!onlydisas)
+		synacor_instr[i].code(&idc);
 	pc += instr_size;
 
 	if (!replay_mode && tracefile) {
 		ASSERT(instr_size > 0 && instr_size < 5, "instr_size: %u",
 		    (uns)instr_size);
 
+		if (onlydisas)
+			fprintf(tracefile, "%05u: ", (uns)pc_start);
 		for (j = 0; j < instr_size; j++) {
 			uint16_t word;
 
@@ -481,6 +504,13 @@ emulate1(void)
 		if (tracehex || tracedisas)
 			fprintf(tracefile, "\n");
 	}
+
+out:
+	if (onlydisas) {
+		if (pc >= ARRAYLEN(memory))
+			halted = true;
+	} else
+		ASSERT(pc < ARRAYLEN(memory), "overflow pc");
 
 	insns++;
 }
@@ -557,7 +587,7 @@ void __dead2
 _illins(const char *f, unsigned l, uint16_t instr)
 {
 
-	printf("%s:%u: ILLEGAL Instruction: %u @PC=%#06x\n",
+	printf("%s:%u: ILLEGAL Instruction: %u @PC=%u\n",
 	    f, l, (unsigned)instr, (unsigned)pc_start);
 	printf("Raw at PC: ");
 	for (unsigned i = 0; i < 3; i++)
