@@ -242,6 +242,7 @@ usage(void)
 		"    -d            Trace output, disassembled\n"
 		"    -l=<N>        Limit execution to N instructions\n"
 		"    -r            Restore save file binaryimage\n"
+		"    -s=<N>        Set initial value of r7\n"
 		"    -t=TRACEFILE  Emit instruction trace\n"
 		"    -x            Trace output in hex\n");
 	exit(1);
@@ -340,6 +341,7 @@ main(int argc, char **argv)
 {
 	const char *romfname;
 	FILE *romfile;
+	uint16_t r7;
 	bool restore;
 	int opt;
 
@@ -347,7 +349,8 @@ main(int argc, char **argv)
 		usage();
 
 	restore = false;
-	while ((opt = getopt(argc, argv, "dl:rt:x")) != -1) {
+	r7 = 0;
+	while ((opt = getopt(argc, argv, "dl:rs:t:x")) != -1) {
 		switch (opt) {
 		case 'd':
 			if (tracehex) {
@@ -361,6 +364,9 @@ main(int argc, char **argv)
 			break;
 		case 'r':
 			restore = true;
+			break;
+		case 's':
+			r7 = atoll(optarg);
 			break;
 		case 't':
 			tracefile = fopen(optarg, "wb");
@@ -400,6 +406,8 @@ main(int argc, char **argv)
 	else
 		loadrom(romfile);
 	fclose(romfile);
+
+	regs[7] = r7;
 
 	signal(SIGINT, ctrlc_handler);
 	signal(SIGUSR1, save_handler);
