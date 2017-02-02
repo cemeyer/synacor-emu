@@ -60,6 +60,7 @@ extern uint64_t		 insnreplaylim;
 extern uint64_t		 insnlimit;
 extern FILE		*infile;
 extern FILE		*outfile;
+extern FILE		*coutfile;
 
 void		 abort_nodump(void) __dead2;
 void		 init(void);

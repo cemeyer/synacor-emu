@@ -11,6 +11,7 @@ struct instr_decode {
 	uint16_t	  arguments;
 
 	void		(*code)(struct instr_decode_common *);
+	void		(*transpile)(struct instr_decode_common *);
 
 	const char	 *name;
 };
@@ -40,5 +41,28 @@ void instr_rmem(struct instr_decode_common *);
 void instr_wmem(struct instr_decode_common *);
 
 void instr_unimp(struct instr_decode_common *);
+
+void trans_add(struct instr_decode_common *);
+void trans_and(struct instr_decode_common *);
+void trans_call(struct instr_decode_common *);
+void trans_eq(struct instr_decode_common *);
+void trans_gt(struct instr_decode_common *);
+void trans_halt(struct instr_decode_common *);
+void trans_in(struct instr_decode_common *);
+void trans_jmp(struct instr_decode_common *);
+void trans_jf(struct instr_decode_common *);
+void trans_jt(struct instr_decode_common *);
+void trans_ld(struct instr_decode_common *);
+void trans_mod(struct instr_decode_common *);
+void trans_mult(struct instr_decode_common *);
+void trans_nop(struct instr_decode_common *);
+void trans_not(struct instr_decode_common *);
+void trans_or(struct instr_decode_common *);
+void trans_out(struct instr_decode_common *);
+void trans_pop(struct instr_decode_common *);
+void trans_push(struct instr_decode_common *);
+void trans_ret(struct instr_decode_common *);
+void trans_rmem(struct instr_decode_common *);
+void trans_wmem(struct instr_decode_common *);
 
 #endif

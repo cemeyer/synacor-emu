@@ -36,36 +36,43 @@ volatile bool	 ctrlc;
 bool		 tracehex;
 bool		 tracedisas;
 bool		 onlydisas;
+bool		 onlytranspile;
 FILE		*tracefile;
 FILE		*outfile;
+FILE		*coutfile;
+char		*cout_stream;
+size_t		 cout_size;
+FILE		*orig_coutfile;
 FILE		*infile;
 
 GHashTable	*input_record;			// insns -> inprec
 
+static bool jmplabels[32*1024];
+
 // Could easily sort by popularity over time.
 static struct instr_decode synacor_instr[] = {
-	{  0, 0, instr_halt, "halt", },
-	{  1, 2, instr_ld,   "mov", },
-	{  2, 1, instr_push, "push", },
-	{  3, 1, instr_pop,  "pop", },
-	{  4, 3, instr_eq,   "eq", },
-	{  5, 3, instr_gt,   "gt", },
-	{  6, 1, instr_jmp,  "jmp", },
-	{  7, 2, instr_jt,   "jt", },
-	{  8, 2, instr_jf,   "jf", },
-	{  9, 3, instr_add,  "add", },
-	{ 10, 3, instr_mult, "mult", },
-	{ 11, 3, instr_mod,  "mod", },
-	{ 12, 3, instr_and,  "and", },
-	{ 13, 3, instr_or,   "or", },
-	{ 14, 2, instr_not,  "not", },
-	{ 15, 2, instr_rmem, "rmem", },
-	{ 16, 2, instr_wmem, "wmem", },
-	{ 17, 1, instr_call, "call", },
-	{ 18, 0, instr_ret,  "ret", },
-	{ 19, 1, instr_out,  "out", },
-	{ 20, 1, instr_in,   "in", },
-	{ 21, 0, instr_nop,  "nop", },
+	{  0, 0, instr_halt, trans_halt, "halt", },
+	{  1, 2, instr_ld,   trans_ld,   "mov", },
+	{  2, 1, instr_push, trans_push, "push", },
+	{  3, 1, instr_pop,  trans_pop,  "pop", },
+	{  4, 3, instr_eq,   trans_eq,   "eq", },
+	{  5, 3, instr_gt,   trans_gt,   "gt", },
+	{  6, 1, instr_jmp,  trans_jmp,  "jmp", },
+	{  7, 2, instr_jt,   trans_jt,   "jt", },
+	{  8, 2, instr_jf,   trans_jf,   "jf", },
+	{  9, 3, instr_add,  trans_add,  "add", },
+	{ 10, 3, instr_mult, trans_mult, "mult", },
+	{ 11, 3, instr_mod,  trans_mod,  "mod", },
+	{ 12, 3, instr_and,  trans_and,  "and", },
+	{ 13, 3, instr_or,   trans_or,   "or", },
+	{ 14, 2, instr_not,  trans_not,  "not", },
+	{ 15, 2, instr_rmem, trans_rmem, "rmem", },
+	{ 16, 2, instr_wmem, trans_wmem, "wmem", },
+	{ 17, 1, instr_call, trans_call, "call", },
+	{ 18, 0, instr_ret,  trans_ret,  "ret", },
+	{ 19, 1, instr_out,  trans_out,  "out", },
+	{ 20, 1, instr_in,   trans_in,   "in", },
+	{ 21, 0, instr_nop,  trans_nop,  "nop", },
 };
 
 void
@@ -240,6 +247,7 @@ usage(void)
 	printf("usage: synacor-emu FLAGS [binaryimage]\n"
 		"\n"
 		"  FLAGS:\n"
+		"    -c=OUTPUT.c   Recompile memory to C\n"
 		"    -d            Trace output, disassembled\n"
 		"    -D            Disassemble memory\n"
 		"    -l=<N>        Limit execution to N instructions\n"
@@ -338,6 +346,92 @@ loadrom(FILE *romfile)
 	printf("Loaded %zu words from image.\n", idx);
 }
 
+static void
+write_c_header(void)
+{
+	size_t i;
+
+	fprintf(coutfile,
+		"#include <stdbool.h>\n"
+		"#include <stdio.h>\n"
+		"#include <stdlib.h>\n"
+		"#include <stdint.h>\n");
+
+	/* Machine state */
+	fprintf(coutfile, "static uint16_t memory[%zu] = {\n\t",
+	    ARRAYLEN(memory));
+	for (i = 0; i < ARRAYLEN(memory); i++)
+		fprintf(coutfile, "%u, ", (uns)memory[i]);
+	fprintf(coutfile, "\n};\n");
+	fprintf(coutfile, "static uintptr_t stack[1024 * 1024] = {\n\t");
+	for (i = 0; i < stack_depth; i++)
+		fprintf(coutfile, "%u, ", (uns)stack[i]);
+	fprintf(coutfile, "\n};\n");
+
+	fprintf(coutfile, "static size_t stack_depth = %zu;\n", stack_depth);
+	fprintf(coutfile, "static bool halted;\n");
+
+	fprintf(coutfile, "static uint16_t regs[%zu] = {\n\t", ARRAYLEN(regs));
+	for (i = 0; i < ARRAYLEN(regs); i++)
+		fprintf(coutfile, "%u, ", (uns)regs[i]);
+	fprintf(coutfile, "\n};\n\n");
+
+	/* Helpers */
+	fprintf(coutfile,
+		"static void\n"
+		"push(uintptr_t val)\n"
+		"{\n"
+		"\tstack[stack_depth++] = val;\n"
+		"}\n\n");
+	fprintf(coutfile,
+		"static uintptr_t\n"
+		"pop(void)\n"
+		"{\n"
+		"\tif (stack_depth == 0)\n"
+		"\t\tabort();\n"
+		"\treturn (stack[--stack_depth]);\n"
+		"}\n\n");
+	fprintf(coutfile,
+		"#define MOD(val) ((val) & 0x7fff)\n\n");
+
+	/* Main body of code */
+	fprintf(coutfile, "void\n");
+	fprintf(coutfile, "main(void)\n");
+	fprintf(coutfile, "{\n");
+	fprintf(coutfile, "\n");
+	fprintf(coutfile, "\tint tmp;\n");
+	fprintf(coutfile, "\tuint16_t bogus = 0xffff;\n\n");
+
+	orig_coutfile = coutfile;
+	coutfile = open_memstream(&cout_stream, &cout_size);
+
+	/* Resume PC: */
+	fprintf(coutfile, "\tgoto l%u;\n\n", (uns)pc);
+}
+
+static void
+write_c_footer(void)
+{
+	size_t i;
+
+	fclose(coutfile);
+	coutfile = orig_coutfile;
+
+	fprintf(coutfile, "\tstatic void *jmptable[] = {\n");
+	for (i = 0; i < ARRAYLEN(jmplabels); i++) {
+		if (!jmplabels[i])
+			continue;
+		fprintf(coutfile, "\t\t[%zu] = &&l%zu,\n", i, i);
+	}
+	fprintf(coutfile, "\t};\n\n");
+
+	fwrite(cout_stream, 1, cout_size, coutfile);
+
+	fprintf(coutfile, "\tdo {} while (0);\n");
+
+	fprintf(coutfile, "}\n");
+}
+
 int
 main(int argc, char **argv)
 {
@@ -352,8 +446,17 @@ main(int argc, char **argv)
 
 	restore = false;
 	r7 = 0;
-	while ((opt = getopt(argc, argv, "Ddl:rs:t:x")) != -1) {
+	while ((opt = getopt(argc, argv, "c:Ddl:rs:t:x")) != -1) {
 		switch (opt) {
+		case 'c':
+			onlytranspile = true;
+			coutfile = fopen(optarg, "wb");
+			if (!coutfile) {
+				printf("Failed to open output `%s'\n",
+				    optarg);
+				exit(1);
+			}
+			break;
 		case 'd':
 			if (tracehex) {
 				printf("-d and -x are mutually exclusive.\n");
@@ -413,7 +516,10 @@ main(int argc, char **argv)
 		loadrom(romfile);
 	fclose(romfile);
 
-	if (onlydisas) {
+	if (onlytranspile) {
+		write_c_header();
+		pc = 0;
+	} else if (onlydisas) {
 		pc = 0;
 		tracefile = stdout;
 	} else
@@ -424,6 +530,9 @@ main(int argc, char **argv)
 
 	emulate();
 
+	if (onlytranspile)
+		write_c_footer();
+
 	printf("Got HALT, stopped.\n");
 
 	print_regs();
@@ -431,6 +540,8 @@ main(int argc, char **argv)
 
 	if (tracefile)
 		fclose(tracefile);
+	if (coutfile)
+		fclose(coutfile);
 
 	return 0;
 }
@@ -448,12 +559,17 @@ emulate1(void)
 
 	instr = memory[pc];
 
+	if (onlytranspile) {
+		fprintf(coutfile, "l%u:\n", (uns)pc);
+		jmplabels[pc] = true;
+	}
+
 	for (i = 0; i < ARRAYLEN(synacor_instr); i++)
 		if (synacor_instr[i].icode == instr)
 			break;
 
 	if (i == ARRAYLEN(synacor_instr)) {
-		if (!onlydisas)
+		if (!onlydisas && !onlytranspile)
 			illins(instr);
 
 		printf("%05u: illegal instruction %u", (uns)pc_start,
@@ -472,7 +588,12 @@ emulate1(void)
 		instr_size++;
 	}
 
-	if (!onlydisas)
+	if (onlytranspile) {
+		if (i == ARRAYLEN(synacor_instr))
+			fprintf(coutfile, "\tabort();\n");
+		else
+			synacor_instr[i].transpile(&idc);
+	} else if (!onlydisas)
 		synacor_instr[i].code(&idc);
 	pc += instr_size;
 
@@ -506,8 +627,10 @@ emulate1(void)
 	}
 
 out:
-	if (onlydisas) {
-		if (pc >= ARRAYLEN(memory))
+	if (onlydisas || onlytranspile) {
+		if (onlytranspile && pc > 6073)
+			halted = true;
+		else if (pc >= ARRAYLEN(memory))
 			halted = true;
 	} else
 		ASSERT(pc < ARRAYLEN(memory), "overflow pc");
