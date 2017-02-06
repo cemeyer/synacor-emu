@@ -516,6 +516,18 @@ main(int argc, char **argv)
 		loadrom(romfile);
 	fclose(romfile);
 
+#if 0
+	/*
+	 * Patch binary to skip Ackermann computation.
+	 * (Patch 5486-5490 incl. with "r0=6; nop; nop.")
+	 */
+	memory[5486] = 1; // set
+	memory[5487] = 32768;
+	memory[5488] = 6;
+	memory[5489] = 21; // nop
+	memory[5490] = 21;
+#endif
+
 	if (onlytranspile) {
 		write_c_header();
 		pc = 0;
