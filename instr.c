@@ -1,5 +1,3 @@
-#include <openssl/des.h>
-
 #include "emu.h"
 #include "instr.h"
 

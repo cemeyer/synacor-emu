@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <unistd.h>
 
 #include <zlib.h>
@@ -44,8 +45,6 @@ char		*cout_stream;
 size_t		 cout_size;
 FILE		*orig_coutfile;
 FILE		*infile;
-
-GHashTable	*input_record;			// insns -> inprec
 
 static bool jmplabels[32*1024];
 
@@ -506,9 +505,6 @@ main(int argc, char **argv)
 	romfile = fopen(romfname, "rb");
 	ASSERT(romfile, "fopen");
 
-	input_record = g_hash_table_new_full(NULL, NULL, NULL, free);
-	ASSERT(input_record, "x");
-
 	init();
 	if (restore)
 		loadrestore(romfile);
@@ -808,85 +804,3 @@ now(void)
 
 	return ((uint64_t)sec * ts.tv_sec + (ts.tv_nsec / 1000));
 }
-
-#ifndef EMU_CHECK
-static void
-ins_inprec(char *dat, size_t sz)
-{
-	struct inprec *new_inp = malloc(sizeof *new_inp + sz + 1);
-
-	ASSERT(new_inp, "oom");
-
-	new_inp->ir_insn = insns;
-	new_inp->ir_len = sz + 1;
-	memcpy(new_inp->ir_inp, dat, sz);
-	new_inp->ir_inp[sz] = 0;
-
-	g_hash_table_insert(input_record, ptr(insns), new_inp);
-}
-
-void
-getsn(uint16_t addr, uint16_t bufsz)
-{
-	struct inprec *prev_inp;
-	char *buf;
-
-	ASSERT((size_t)addr + bufsz < 0xffff, "overflow");
-	//memset(&memory[addr], 0, bufsz);
-
-	if (bufsz <= 1)
-		return;
-
-	prev_inp = g_hash_table_lookup(input_record, ptr(insns));
-	if (replay_mode)
-		ASSERT(prev_inp, "input at insn:%ju not found!\n",
-		    (uintmax_t)insns);
-
-	if (prev_inp) {
-		memcpy(&memory[addr], prev_inp->ir_inp, prev_inp->ir_len);
-		return;
-	}
-
-	printf("Gets (':'-prefix for hex)> ");
-	fflush(stdout);
-
-	buf = malloc(2 * bufsz + 2);
-	ASSERT(buf, "oom");
-	buf[0] = 0;
-
-	if (fgets(buf, 2 * bufsz + 2, stdin) == NULL)
-		goto out;
-
-	if (buf[0] != ':') {
-		size_t len;
-
-		len = strlen(buf);
-		while (len > 0 &&
-		    (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
-			buf[len - 1] = '\0';
-			len--;
-		}
-
-		strncpy((char*)&memory[addr], buf, bufsz);
-		memory[addr + strlen(buf)] = 0;
-		ins_inprec(buf, bufsz);
-	} else {
-		unsigned i;
-		for (i = 0; i < bufsz - 1u; i++) {
-			unsigned byte;
-
-			if (buf[2*i+1] == 0 || buf[2*i+2] == 0) {
-				memory[addr+i] = 0;
-				break;
-			}
-
-			sscanf(&buf[2*i+1], "%02x", &byte);
-			//printf("%02x", byte);
-			memory[addr + i] = byte;
-		}
-		ins_inprec((void*)&memory[addr], i);
-	}
-out:
-	free(buf);
-}
-#endif

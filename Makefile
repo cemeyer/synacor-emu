@@ -8,11 +8,6 @@ WARNFLAGS=	-Wall -Wextra -std=gnu11 -Wno-unused-function -Wno-unused-variable -W
 OTHERFLAGS=	-fexceptions -Wp,-D_FORTIFY_SOURCE=2
 OPTFLAGS=	-O3 -g -pipe -m64 -mtune=native -march=native
 
-GLIB_FLAGS=	`pkg-config --cflags glib-2.0`
-GLIB_LDFLAGS=	`pkg-config --libs glib-2.0`
-SSL_FLAGS=	`pkg-config --cflags openssl`
-SSL_LDFLAGS=	`pkg-config --libs openssl`
-
 # Platform
 CC=		cc
 CC_VER=		$(shell $(CC) --version)
@@ -24,8 +19,8 @@ ifneq (,$(findstring clang,$(CC_VER)))
     WARNFLAGS+=		-Wno-unknown-attributes
 endif
 
-FLAGS=		$(WARNFLAGS) $(OTHERFLAGS) $(OPTFLAGS) $(GLIB_FLAGS) $(SSL_FLAGS) $(NEWGCCFLAGS) $(CFLAGS)
-LDLIBS=		$(GLIB_LDFLAGS) $(SSL_LDFLAGS) $(LDFLAGS)
+FLAGS=		$(WARNFLAGS) $(OTHERFLAGS) $(OPTFLAGS) $(NEWGCCFLAGS) $(CFLAGS)
+LDLIBS=		$(LDFLAGS)
 
 $(PROG): $(SRCS) $(HDRS)
 	$(CC) $(FLAGS) $(SRCS) -o $@ -lz $(LDLIBS)

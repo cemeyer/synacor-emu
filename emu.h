@@ -12,8 +12,6 @@
 #include <string.h>
 #include <time.h>
 
-#include <glib.h>
-
 #define	likely(cond)	__builtin_expect ((cond), 1)
 #define	unlikely(cond)	__builtin_expect ((cond), 0)
 #ifndef	__unused
@@ -74,9 +72,6 @@ void		 _illins(const char *f, unsigned l, uint16_t instr) __dead2;
 void		 print_regs(void);
 /* Microseconds: */
 uint64_t	 now(void);
-#ifndef	EMU_CHECK
-void		 getsn(uint16_t addr, uint16_t len);
-#endif
 
 void		 print_ips(void);
 
